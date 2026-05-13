@@ -7,6 +7,8 @@ import type { AdminMember, AdminUserSearchResult } from '@librechat/data-schemas
 import type * as t from '@/types';
 import {
   addRoleMemberFn,
+  availableScopesOptions,
+  createScopeFn,
   removeRoleMemberFn,
   roleQueryOptions,
   roleMembersQueryOptions,
@@ -332,7 +334,27 @@ export function EditRoleDialog({ role, canManage, onClose }: t.EditRoleDialogPro
             {role && (
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
+                  try {
+                    const scopes = await queryClient.ensureQueryData(availableScopesOptions);
+                    const exists = scopes.some(
+                      (s) =>
+                        s.principalType === PrincipalType.ROLE && s.principalId === role.id,
+                    );
+                    if (!exists) {
+                      await createScopeFn({
+                        data: {
+                          principalType: PrincipalType.ROLE,
+                          name: role.name,
+                          priority: 50,
+                          principalId: role.id,
+                        },
+                      });
+                      await queryClient.invalidateQueries({ queryKey: ['availableScopes'] });
+                    }
+                  } catch {
+                    /* 已存在或权限不足都直接跳过去 */
+                  }
                   onClose();
                   router.navigate({
                     to: '/configuration',

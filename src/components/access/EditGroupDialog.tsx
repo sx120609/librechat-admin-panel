@@ -7,6 +7,8 @@ import type { AdminMember, AdminUserSearchResult } from '@librechat/data-schemas
 import type * as t from '@/types';
 import {
   addGroupMemberFn,
+  availableScopesOptions,
+  createScopeFn,
   groupMembersQueryOptions,
   removeGroupMemberFn,
   updateGroupFn,
@@ -251,7 +253,27 @@ export function EditGroupDialog({ group, canManage, onClose }: t.EditGroupDialog
             {group && (
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
+                  try {
+                    const scopes = await queryClient.ensureQueryData(availableScopesOptions);
+                    const exists = scopes.some(
+                      (s) =>
+                        s.principalType === PrincipalType.GROUP && s.principalId === group.id,
+                    );
+                    if (!exists) {
+                      await createScopeFn({
+                        data: {
+                          principalType: PrincipalType.GROUP,
+                          name: group.name,
+                          priority: 50,
+                          principalId: group.id,
+                        },
+                      });
+                      await queryClient.invalidateQueries({ queryKey: ['availableScopes'] });
+                    }
+                  } catch {
+                    /* 已存在或权限不足都直接跳过去，让 ConfigPage 显示错误 */
+                  }
                   onClose();
                   router.navigate({
                     to: '/configuration',
