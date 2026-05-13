@@ -1027,5 +1027,17 @@
   "com_kv_type_number": "123",
   "com_kv_type_boolean": "T/F",
   "com_kv_type_json": "{ }",
-  "com_a11y_logo_alt": "LibreChat logo"
+  "com_a11y_logo_alt": "LibreChat logo",
+  "com_users_col_balance": "Balance",
+  "com_users_balance_title": "Token balance",
+  "com_users_balance_add": "Add credits",
+  "com_users_balance_subtract": "Subtract credits",
+  "com_users_balance_set": "Set balance",
+  "com_users_balance_amount_label": "Amount",
+  "com_users_balance_updated": "Balance updated",
+  "com_users_role_change_admin": "Promote to admin",
+  "com_users_role_change_user": "Demote to user",
+  "com_access_edit_balance_rules": "Edit balance rules",
+  "com_nav_language": "Language",
+  "com_settings_language_desc": "Choose your preferred display language"
 }

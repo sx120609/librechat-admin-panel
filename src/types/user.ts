@@ -23,6 +23,7 @@ export interface UserRowProps {
   roles: AssignmentRef[];
   groups: AssignmentRef[];
   hasUserProfile: boolean;
+  tokenCredits: number | null;
   isLast: boolean;
   onViewDetails: () => void;
   onDelete: () => void;
@@ -40,6 +41,7 @@ export interface UserDetailDialogProps {
   canManageRoles?: boolean;
   canManageGroups?: boolean;
   canAssignConfigs?: boolean;
+  canManageUsers?: boolean;
 }
 
 export interface ProfileListProps {

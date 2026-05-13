@@ -7,7 +7,9 @@ import type * as t from '@/types';
 import {
   addGroupMemberFn,
   addRoleMemberFn,
+  adjustBalanceFn,
   availableScopesOptions,
+  balancesQueryOptions,
   createScopeFn,
   deleteScopeFn,
   groupAssignmentsQueryOptions,
@@ -16,6 +18,8 @@ import {
   removeRoleMemberFn,
   roleAssignmentsQueryOptions,
   allRolesQueryOptions,
+  setBalanceFn,
+  updateUserRoleFn,
 } from '@/server';
 import { Avatar, TrashButton } from '@/components/shared';
 import { ConfirmDialog } from '@/components/access';
@@ -42,6 +46,7 @@ export function UserDetailDialog({
   canManageRoles = false,
   canManageGroups = false,
   canAssignConfigs = false,
+  canManageUsers = false,
 }: t.UserDetailDialogProps) {
   const localize = useLocalize();
   const queryClient = useQueryClient();
@@ -194,7 +199,9 @@ export function UserDetailDialog({
         >
           {user && view === 'main' && (
             <div className="flex flex-col gap-5" aria-label={localize('com_users_detail_title')}>
-              <UserHeader user={user} />
+              <UserHeader user={user} canManageUsers={canManageUsers} />
+
+              {canManageUsers && <UserBalanceSection userId={user.id} />}
 
               <ProfileList
                 roles={userRoles}
@@ -279,11 +286,23 @@ function getConfirmDesc(
   return localize('com_users_delete_profile_desc', { name: userName });
 }
 
-function UserHeader({ user }: { user: TUser }) {
+function UserHeader({ user, canManageUsers }: { user: TUser; canManageUsers: boolean }) {
+  const localize = useLocalize();
+  const queryClient = useQueryClient();
+  const isAdmin = user.role === SystemRoles.ADMIN;
+  const nextRole = isAdmin ? SystemRoles.USER : SystemRoles.ADMIN;
+
+  const roleMutation = useMutation({
+    mutationFn: () => updateUserRoleFn({ data: { userId: user.id, role: nextRole } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+    },
+  });
+
   return (
     <div className="flex items-center gap-3">
       <Avatar name={user.name} size="md" />
-      <div className="flex min-w-0 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col">
         <span className="truncate text-base font-semibold text-(--cui-color-text-default)">
           {user.name}
         </span>
@@ -291,14 +310,156 @@ function UserHeader({ user }: { user: TUser }) {
         <span
           className={cn(
             'mt-1 inline-block w-fit rounded-full px-2 py-0.5 text-[10px] font-medium',
-            user.role === SystemRoles.ADMIN
-              ? 'badge-admin'
-              : 'bg-(--cui-color-background-secondary) text-(--cui-color-text-muted)',
+            isAdmin ? 'badge-admin' : 'bg-(--cui-color-background-secondary) text-(--cui-color-text-muted)',
           )}
         >
           {user.role}
         </span>
       </div>
+      {canManageUsers && (
+        <button
+          type="button"
+          onClick={() => roleMutation.mutate()}
+          disabled={roleMutation.isPending}
+          aria-disabled={roleMutation.isPending}
+          className="flex shrink-0 items-center gap-1 rounded-md border border-(--cui-color-stroke-default) bg-transparent px-2.5 py-1 text-xs text-(--cui-color-text-default) transition-colors hover:bg-(--cui-color-background-hover) disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Icon name="refresh" size="xs" />
+          {isAdmin
+            ? localize('com_users_role_change_user')
+            : localize('com_users_role_change_admin')}
+        </button>
+      )}
+    </div>
+  );
+}
+
+type BalanceAction = 'add' | 'subtract' | 'set';
+
+function UserBalanceSection({ userId }: { userId: string }) {
+  const localize = useLocalize();
+  const queryClient = useQueryClient();
+  const { data: balances = [] } = useQuery(balancesQueryOptions);
+  const current = useMemo(
+    () => balances.find((b) => b.userId === userId)?.tokenCredits ?? 0,
+    [balances, userId],
+  );
+
+  const [action, setAction] = useState<BalanceAction | null>(null);
+  const [input, setInput] = useState('');
+
+  const reset = () => {
+    setAction(null);
+    setInput('');
+  };
+
+  const adjustMutation = useMutation({
+    mutationFn: (delta: number) => adjustBalanceFn({ data: { userId, delta } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['balances'] });
+      reset();
+    },
+  });
+
+  const setMutation = useMutation({
+    mutationFn: (tokenCredits: number) => setBalanceFn({ data: { userId, tokenCredits } }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['balances'] });
+      reset();
+    },
+  });
+
+  const busy = adjustMutation.isPending || setMutation.isPending;
+
+  const submit = () => {
+    const n = Number(input);
+    if (!Number.isFinite(n) || n < 0 || !Number.isInteger(n)) return;
+    if (action === 'add') adjustMutation.mutate(n);
+    else if (action === 'subtract') adjustMutation.mutate(-n);
+    else if (action === 'set') setMutation.mutate(n);
+  };
+
+  const inputValid = (() => {
+    if (!input) return false;
+    const n = Number(input);
+    return Number.isFinite(n) && Number.isInteger(n) && n >= 0;
+  })();
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-(--cui-color-stroke-default) p-3">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-(--cui-color-text-muted)">
+          {localize('com_users_balance_title')}
+        </span>
+        <span
+          className={cn(
+            'font-mono text-base font-semibold tabular-nums',
+            current < 0
+              ? 'text-(--cui-color-text-danger)'
+              : 'text-(--cui-color-text-default)',
+          )}
+        >
+          {current.toLocaleString()}
+        </span>
+      </div>
+
+      {action === null && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setAction('add')}
+            className="flex items-center gap-1 rounded-md border border-(--cui-color-stroke-default) px-2.5 py-1 text-xs text-(--cui-color-text-default) hover:bg-(--cui-color-background-hover)"
+          >
+            <Icon name="plus" size="xs" />
+            {localize('com_users_balance_add')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setAction('subtract')}
+            className="flex items-center gap-1 rounded-md border border-(--cui-color-stroke-default) px-2.5 py-1 text-xs text-(--cui-color-text-default) hover:bg-(--cui-color-background-hover)"
+          >
+            <Icon name="minus" size="xs" />
+            {localize('com_users_balance_subtract')}
+          </button>
+          <button
+            type="button"
+            onClick={() => setAction('set')}
+            className="flex items-center gap-1 rounded-md border border-(--cui-color-stroke-default) px-2.5 py-1 text-xs text-(--cui-color-text-default) hover:bg-(--cui-color-background-hover)"
+          >
+            <Icon name="edit" size="xs" />
+            {localize('com_users_balance_set')}
+          </button>
+        </div>
+      )}
+
+      {action !== null && (
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={0}
+            step={1}
+            inputMode="numeric"
+            placeholder={localize('com_users_balance_amount_label')}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            disabled={busy}
+            aria-label={localize('com_users_balance_amount_label')}
+            className="flex-1 rounded-md border border-(--cui-color-stroke-default) bg-(--cui-color-background-default) px-2.5 py-1.5 text-sm text-(--cui-color-text-default) outline-none focus:border-(--cui-color-stroke-active) disabled:opacity-50"
+          />
+          <Button
+            type="primary"
+            label={localize('com_ui_save')}
+            onClick={submit}
+            disabled={busy || !inputValid}
+          />
+          <Button
+            type="secondary"
+            label={localize('com_ui_cancel')}
+            onClick={reset}
+            disabled={busy}
+          />
+        </div>
+      )}
     </div>
   );
 }

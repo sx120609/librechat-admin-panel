@@ -6,6 +6,7 @@ import type { TUser } from 'librechat-data-provider';
 import type * as t from '@/types';
 import {
   availableScopesOptions,
+  balancesQueryOptions,
   deleteUserFn,
   groupAssignmentsQueryOptions,
   roleAssignmentsQueryOptions,
@@ -51,6 +52,17 @@ export function UsersPage() {
   const { data: roleAssignments = {} } = useQuery(roleAssignmentsQueryOptions);
   const { data: groupAssignments = {} } = useQuery(groupAssignmentsQueryOptions);
   const { data: allScopes = [] } = useQuery(availableScopesOptions);
+  const { data: balances = [] } = useQuery({
+    ...balancesQueryOptions,
+    enabled: canManage,
+  });
+
+  const balanceMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const b of balances) m.set(b.userId, b.tokenCredits);
+    return m;
+  }, [balances]);
+
 
   const userProfileSet = useMemo(() => {
     const set = new Set<string>();
@@ -165,6 +177,12 @@ export function UsersPage() {
                 <th scope="col" className="px-4 py-2.5 font-medium text-(--cui-color-text-muted)">
                   {localize('com_users_col_role')}
                 </th>
+                <th
+                  scope="col"
+                  className="px-4 py-2.5 text-right font-medium text-(--cui-color-text-muted)"
+                >
+                  {localize('com_users_col_balance')}
+                </th>
                 <th scope="col" className="px-4 py-2.5 font-medium text-(--cui-color-text-muted)">
                   {localize('com_users_col_joined')}
                 </th>
@@ -181,6 +199,7 @@ export function UsersPage() {
                   roles={roleAssignments[user.id] ?? []}
                   groups={groupAssignments[user.id] ?? []}
                   hasUserProfile={userProfileSet.has(user.id)}
+                  tokenCredits={balanceMap.has(user.id) ? balanceMap.get(user.id)! : null}
                   isLast={i === filtered.length - 1}
                   onViewDetails={() => setDetailUser(user)}
                   onDelete={() => setDeleteTarget(user)}
@@ -189,7 +208,7 @@ export function UsersPage() {
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={4}>
+                  <td colSpan={5}>
                     <EmptyState message={localize('com_users_empty')} />
                   </td>
                 </tr>
@@ -212,6 +231,7 @@ export function UsersPage() {
         canManageRoles={canManageRoles}
         canManageGroups={canManageGroups}
         canAssignConfigs={canAssignConfigs}
+        canManageUsers={canManage}
       />
 
       <ConfirmDialog
@@ -236,6 +256,7 @@ function UserRow({
   roles,
   groups,
   hasUserProfile,
+  tokenCredits,
   isLast,
   onViewDetails,
   onDelete,
@@ -323,6 +344,20 @@ function UserRow({
         >
           {user.role}
         </span>
+      </td>
+      <td
+        className={cn(
+          'px-4 py-3 text-right font-mono tabular-nums',
+          tokenCredits !== null && tokenCredits < 0
+            ? 'text-(--cui-color-text-danger)'
+            : 'text-(--cui-color-text-default)',
+        )}
+      >
+        {tokenCredits === null ? (
+          <span className="text-(--cui-color-text-muted)">—</span>
+        ) : (
+          tokenCredits.toLocaleString()
+        )}
       </td>
       <td className="px-4 py-3 text-(--cui-color-text-muted)">
         {new Date(user.createdAt).toLocaleDateString()}

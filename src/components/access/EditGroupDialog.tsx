@@ -1,6 +1,8 @@
 import { useState, useCallback } from 'react';
-import { Button, Dialog, Tabs } from '@clickhouse/click-ui';
+import { Button, Dialog, Icon, Tabs } from '@clickhouse/click-ui';
+import { useRouter } from '@tanstack/react-router';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { PrincipalType } from 'librechat-data-provider';
 import type { AdminMember, AdminUserSearchResult } from '@librechat/data-schemas';
 import type * as t from '@/types';
 import {
@@ -26,6 +28,7 @@ type EditGroupTab = 'details' | 'members';
 export function EditGroupDialog({ group, canManage, onClose }: t.EditGroupDialogProps) {
   const localize = useLocalize();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<EditGroupTab>('details');
   const [name, setName] = useState(group?.name ?? '');
   const [description, setDescription] = useState(group?.description ?? '');
@@ -244,18 +247,39 @@ export function EditGroupDialog({ group, canManage, onClose }: t.EditGroupDialog
               {error}
             </p>
           )}
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              type="secondary"
-              label={localize('com_ui_cancel')}
-              onClick={onClose}
-              disabled={mutation.isPending}
-            />
-            <Button
-              type="primary"
-              label={localize('com_ui_save')}
-              disabled={!canManage || !name.trim() || (!detailsDirty && !membersDirty) || mutation.isPending}
-            />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {group && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  router.navigate({
+                    to: '/configuration',
+                    search: {
+                      tab: 'system',
+                      scope: `${PrincipalType.GROUP}:${group.id}`,
+                    },
+                  });
+                }}
+                className="flex items-center gap-1 rounded-md border border-(--cui-color-stroke-default) px-2.5 py-1 text-xs text-(--cui-color-text-default) transition-colors hover:bg-(--cui-color-background-hover)"
+              >
+                <Icon name="wallet" size="xs" />
+                {localize('com_access_edit_balance_rules')}
+              </button>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                type="secondary"
+                label={localize('com_ui_cancel')}
+                onClick={onClose}
+                disabled={mutation.isPending}
+              />
+              <Button
+                type="primary"
+                label={localize('com_ui_save')}
+                disabled={!canManage || !name.trim() || (!detailsDirty && !membersDirty) || mutation.isPending}
+              />
+            </div>
           </div>
         </form>
       </Dialog.Content>
